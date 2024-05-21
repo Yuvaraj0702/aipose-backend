@@ -1,0 +1,77 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+myenv/
+
+# Django stuff:
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+*.eggs/
+*.log
+*.sql
+*.sqlite3
+*.db
+
+# Django migrations
+**/migrations/
+**/migrations/*
+
+# Local development files
+local_settings.py
+db.sqlite3
+
+# Media files
+media/
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Static files
+staticfiles/
+static/
+
+# Backup files
+*.bak
+*.swp
+*.tmp
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Node modules (if using Node.js for front-end dependencies)
+node_modules/
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+
+# Other
+*.coverage
+*.bench
+*.log
+*.pot
