@@ -1,14 +1,20 @@
 import tensorflow as tf
-import tensorflow_hub as hub
 import numpy as np
+import os
 
 class PoseAnalyzer:
-    def __init__(self):
+    def __init__(self, model_path="./models/movenet_model"):
+        # Verify if the model directory exists and contains the expected files
+        if not os.path.exists(model_path):
+            raise RuntimeError(f"Model path '{model_path}' does not exist.")
+        if not any(os.scandir(model_path)):
+            raise RuntimeError(f"Model path '{model_path}' is empty.")
+
         try:
-            self.model = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
-            self.movenet = self.model.signatures['serving_default']  # type: ignore
+            self.model = tf.saved_model.load(model_path)
+            self.movenet = self.model.signatures['serving_default']
         except Exception as e:
-            raise RuntimeError("Failed to load the MoveNet model from TensorFlow Hub.") from e
+            raise RuntimeError("Failed to load the MoveNet model from the specified path."+str(e)) from e
 
     @staticmethod
     def calculate_angle(point1, point2, point3):

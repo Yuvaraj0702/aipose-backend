@@ -137,7 +137,7 @@ class SeatedPosture(APIView):
                 return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
-            return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "An error occurred while processing the file."+str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
 class HandPosition(APIView):
@@ -351,5 +351,5 @@ class DeskPosition(APIView):
                 return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
-            return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "An error occurred while processing the file."+ str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         

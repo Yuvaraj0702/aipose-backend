@@ -14,9 +14,9 @@ class HandPoseAnalyzer:
     ]
 
     def __init__(self):
-        self.model_url = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+        # self.model_url = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
         self.model_path = 'hand_landmarker.task'
-        self.download_model(self.model_url, self.model_path)
+        # self.download_model(self.model_url, self.model_path)
         self.setup_detector()
 
     def setup_detector(self):
@@ -25,18 +25,18 @@ class HandPoseAnalyzer:
         self.options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=2)
         self.detector = vision.HandLandmarker.create_from_options(self.options)
 
-    def download_model(self, url, save_path):
-        # Download the model file if it's not already present
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                with open(save_path, 'wb') as file:
-                    file.write(response.content)
-                print(f"Model downloaded and saved as {save_path}")
-            else:
-                print(f"Failed to download the model. Status code: {response.status_code}")
-        except Exception as e:
-            print(f"An error occurred while downloading the model: {e}")
+    # def download_model(self, url, save_path):
+    #     # Download the model file if it's not already present
+    #     try:
+    #         response = requests.get(url)
+    #         if response.status_code == 200:
+    #             with open(save_path, 'wb') as file:
+    #                 file.write(response.content)
+    #             print(f"Model downloaded and saved as {save_path}")
+    #         else:
+    #             print(f"Failed to download the model. Status code: {response.status_code}")
+    #     except Exception as e:
+    #         print(f"An error occurred while downloading the model: {e}")
 
     def analyze_hand_pose(self, image_path):
         # Load the input image and detect hand landmarks
