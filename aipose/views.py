@@ -6,8 +6,7 @@ from django.core.files.storage import default_storage
 from django.conf import settings
 from PIL import Image as PILImage, ImageDraw
 import os
-import tensorflow as tf
-import numpy as np
+import uuid
 
 from .models import Image
 from .serializers import ImageSerializer
@@ -17,6 +16,7 @@ from .deskpose import DeskPoseAnalyzer
 
 class SeatedPosture(APIView):
     parser_classes = (MultiPartParser, FormParser)
+    pose_analyzer = PoseAnalyzer()  # Initialize PoseAnalyzer at class level
 
     def get(self, request, format=None):
         images = Image.objects.all()
@@ -33,41 +33,20 @@ class SeatedPosture(APIView):
             return Response({"error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Generate a unique identifier for the image
+            unique_id = str(uuid.uuid4())
+            temp_image_name = unique_id + '_' + image_file.name
+
             # Save the uploaded image temporarily
-            temp_image_path = default_storage.save('tmp/' + image_file.name, image_file)
+            temp_image_path = default_storage.save('tmp/' + temp_image_name, image_file)
             temp_image_full_path = os.path.join(settings.MEDIA_ROOT, temp_image_path)
 
             # Load the original image to get its dimensions
             with PILImage.open(temp_image_full_path) as img:
                 original_width, original_height = img.size
 
-            # Preprocess the image
-            def preprocess_image(image_path):
-                try:
-                    image = tf.io.read_file(image_path)
-                    image = tf.image.decode_jpeg(image)
-                    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-                except tf.errors.InvalidArgumentError:
-                    raise ValueError("Invalid image file. Please check the image path and format.")
-                
-                image = tf.image.resize_with_pad(image, target_height=192, target_width=192)
-                image = tf.image.adjust_contrast(image, 300.0)
-                image = tf.cast(image, dtype=tf.int32)
-                return tf.expand_dims(image, axis=0)
-
-            preprocessed_image = preprocess_image(temp_image_full_path)
-
-            # Save the preprocessed image temporarily for analysis
-            preprocessed_image_path = 'preprocessed_' + image_file.name
-            preprocessed_image_full_path = os.path.join(settings.MEDIA_ROOT, 'tmp', preprocessed_image_path)
-            preprocessed_image_np = tf.squeeze(preprocessed_image).numpy()
-            preprocessed_image_pil = PILImage.fromarray(preprocessed_image_np.astype(np.uint8))
-            preprocessed_image_pil.save(preprocessed_image_full_path)
-
             # Analyze the pose using PoseAnalyzer
-            pose_analyzer = PoseAnalyzer()
-            pose_results, keypoints_with_scores, scores = pose_analyzer.analyze_pose(temp_image_full_path)
-
+            pose_results, keypoints_with_scores, scores = self.pose_analyzer.analyze_pose(temp_image_full_path)
 
             # Adjust keypoints to the original image dimensions
             def adjust_keypoints(keypoints, original_width, original_height, target_width=192, target_height=192):
@@ -107,41 +86,26 @@ class SeatedPosture(APIView):
                         draw.line((start_x, start_y, end_x, end_y), fill=line_color, width=3)
                 
                 # Save the annotated image
-                annotated_image_path = 'annotated_' + image_file.name
-                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
+                annotated_image_name = 'annotated_' + unique_id + '_' + image_file.name
+                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_name)
                 img.save(annotated_image_full_path)
-
-            # Save the annotated image to the model
-            with open(annotated_image_full_path, 'rb') as f:
-                annotated_image_file = default_storage.save('images/' + annotated_image_path, f)
 
             # Clean up temporary files
             os.remove(temp_image_full_path)
-            os.remove(preprocessed_image_full_path)
 
             # Combine analysis results
             analysis_results = {
                 'pose_analysis': pose_results
             }
 
-            # Save image instance with annotated image
-            serializer = ImageSerializer(data={'title': request.data.get('title', ''),
-                                               'image_file': annotated_image_file})
-            if serializer.is_valid():
-                serializer.save()
-                image_instance = serializer.instance
-
-                # Include analysis results in the response
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
-            else:
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
+            return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response({"error": "An error occurred while processing the file. " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class HandPosition(APIView):
     parser_classes = (MultiPartParser, FormParser)
+    hand_pose_analyzer = HandPoseAnalyzer()  # Initialize HandPoseAnalyzer at class level
 
     def get(self, request, format=None):
         images = Image.objects.all()
@@ -158,78 +122,41 @@ class HandPosition(APIView):
             return Response({"error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Generate a unique identifier for the image
+            unique_id = str(uuid.uuid4())
+            temp_image_name = unique_id + '_' + image_file.name
+
             # Save the uploaded image temporarily
-            temp_image_path = default_storage.save('tmp/' + image_file.name, image_file)
+            temp_image_path = default_storage.save('tmp/' + temp_image_name, image_file)
             temp_image_full_path = os.path.join(settings.MEDIA_ROOT, temp_image_path)
 
-            # Load the original image to get its dimensions
-            with PILImage.open(temp_image_full_path) as img:
-                original_width, original_height = img.size
-
-            # Preprocess the image
-            def preprocess_image(image_path):
-                try:
-                    image = tf.io.read_file(image_path)
-                    image = tf.image.decode_jpeg(image)
-                    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-                except tf.errors.InvalidArgumentError:
-                    raise ValueError("Invalid image file. Please check the image path and format.")
-                
-                image = tf.image.resize_with_pad(image, target_height=192, target_width=192)
-                image = tf.image.adjust_contrast(image, 300.0)
-                image = tf.cast(image, dtype=tf.int32)
-                return tf.expand_dims(image, axis=0)
-
-            preprocessed_image = preprocess_image(temp_image_full_path)
-
-            # Save the preprocessed image temporarily for analysis
-            preprocessed_image_path = 'preprocessed_' + image_file.name
-            preprocessed_image_full_path = os.path.join(settings.MEDIA_ROOT, 'tmp', preprocessed_image_path)
-            preprocessed_image_np = tf.squeeze(preprocessed_image).numpy()
-            preprocessed_image_pil = PILImage.fromarray(preprocessed_image_np.astype(np.uint8))
-            preprocessed_image_pil.save(preprocessed_image_full_path)
-
             # Analyze the hand pose using HandPoseAnalyzer
-            hand_pose_analyzer = HandPoseAnalyzer()
-            hand_results = hand_pose_analyzer.analyze_hand_pose(temp_image_full_path)
+            hand_results = self.hand_pose_analyzer.analyze_hand_pose(temp_image_full_path)
 
             # Draw keypoints and lines on the original image
             with PILImage.open(temp_image_full_path) as img:
                 
                 # Save the annotated image
-                annotated_image_path = 'annotated_' + image_file.name
-                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
+                annotated_image_name = 'annotated_' + unique_id + '_' + image_file.name
+                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_name)
                 img.save(annotated_image_full_path)
-
-            # Save the annotated image to the model
-            with open(annotated_image_full_path, 'rb') as f:
-                annotated_image_file = default_storage.save('images/' + annotated_image_path, f)
 
             # Clean up temporary files
             os.remove(temp_image_full_path)
-            os.remove(preprocessed_image_full_path)
 
             # Combine analysis results
             analysis_results = {
                 'hand_pose_analysis': hand_results
             }
 
-            # Save image instance with annotated image
-            serializer = ImageSerializer(data={'title': request.data.get('title', ''),
-                                               'image_file': annotated_image_file})
-            if serializer.is_valid():
-                serializer.save()
-
-                # Include analysis results in the response
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
-            else:
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
+            return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
             return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class DeskPosition(APIView):
     parser_classes = (MultiPartParser, FormParser)
+    pose_analyzer = DeskPoseAnalyzer()  # Initialize DeskPoseAnalyzer at class level
 
     def get(self, request, format=None):
         images = Image.objects.all()
@@ -246,42 +173,20 @@ class DeskPosition(APIView):
             return Response({"error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Generate a unique identifier for the image
+            unique_id = str(uuid.uuid4())
+            temp_image_name = unique_id + '_' + image_file.name
+
             # Save the uploaded image temporarily
-            temp_image_path = default_storage.save('tmp/' + image_file.name, image_file)
+            temp_image_path = default_storage.save('tmp/' + temp_image_name, image_file)
             temp_image_full_path = os.path.join(settings.MEDIA_ROOT, temp_image_path)
 
             # Load the original image to get its dimensions
             with PILImage.open(temp_image_full_path) as img:
                 original_width, original_height = img.size
 
-            # Preprocess the image
-            def preprocess_image(image_path):
-                try:
-                    image = tf.io.read_file(image_path)
-                    image = tf.image.decode_jpeg(image)
-                    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-                except tf.errors.InvalidArgumentError:
-                    raise ValueError("Invalid image file. Please check the image path and format.")
-                
-                image = tf.image.resize_with_pad(image, target_height=192, target_width=192)
-                image = tf.image.adjust_contrast(image, 300.0)
-                image = tf.cast(image, dtype=tf.int32)
-                return tf.expand_dims(image, axis=0)
-
-            preprocessed_image = preprocess_image(temp_image_full_path)
-
-            # Save the preprocessed image temporarily for analysis
-            preprocessed_image_path = 'preprocessed_' + image_file.name
-            preprocessed_image_full_path = os.path.join(settings.MEDIA_ROOT, 'tmp', preprocessed_image_path)
-            preprocessed_image_np = tf.squeeze(preprocessed_image).numpy()
-            preprocessed_image_pil = PILImage.fromarray(preprocessed_image_np.astype(np.uint8))
-            preprocessed_image_pil.save(preprocessed_image_full_path)
-
             # Analyze the pose using PoseAnalyzer
-            pose_analyzer = DeskPoseAnalyzer()
-            pose_results, keypoints_with_scores, scores = pose_analyzer.analyze_pose(temp_image_full_path)
-
-           
+            pose_results, keypoints_with_scores, scores = self.pose_analyzer.analyze_pose(temp_image_full_path)
 
             # Adjust keypoints to the original image dimensions
             def adjust_keypoints(keypoints, original_width, original_height, target_width=192, target_height=192):
@@ -321,35 +226,19 @@ class DeskPosition(APIView):
                         draw.line((start_x, start_y, end_x, end_y), fill=line_color, width=3)
                 
                 # Save the annotated image
-                annotated_image_path = 'annotated_' + image_file.name
-                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
+                annotated_image_name = 'annotated_' + unique_id + '_' + image_file.name
+                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_name)
                 img.save(annotated_image_full_path)
-
-            # Save the annotated image to the model
-            with open(annotated_image_full_path, 'rb') as f:
-                annotated_image_file = default_storage.save('images/' + annotated_image_path, f)
 
             # Clean up temporary files
             os.remove(temp_image_full_path)
-            os.remove(preprocessed_image_full_path)
 
             # Combine analysis results
             analysis_results = {
                 'pose_analysis': pose_results,
             }
 
-            # Save image instance with annotated image
-            serializer = ImageSerializer(data={'title': request.data.get('title', ''),
-                                               'image_file': annotated_image_file})
-            if serializer.is_valid():
-                serializer.save()
-                image_instance = serializer.instance
-
-                # Include analysis results in the response
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
-            else:
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
+            return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
-            return Response({"error": "An error occurred while processing the file."+ str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response({"error": "An error occurred while processing the file. " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
