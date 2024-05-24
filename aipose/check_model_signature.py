@@ -1,7 +1,7 @@
 import tensorflow as tf
 import os
 
-def check_model_signature(model_path="./models/movenet_model"):
+def check_model_signature(model_path="../models/movenet_model"):
     # Verify if the model directory exists and contains the expected files
     if not os.path.exists(model_path):
         raise RuntimeError(f"Model path '{model_path}' does not exist.")
