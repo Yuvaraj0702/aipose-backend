@@ -14,6 +14,8 @@ class DeskPoseAnalyzer:
         dot_product = np.dot(a, b)
         magnitude_a = np.linalg.norm(a)
         magnitude_b = np.linalg.norm(b)
+        if magnitude_a == 0 or magnitude_b == 0:
+            return 0
         angle = np.arccos(dot_product / (magnitude_a * magnitude_b))
         return np.degrees(angle)
 
@@ -23,6 +25,8 @@ class DeskPoseAnalyzer:
         horizontal = np.array([1, 0])
         dot_product = np.dot(vector, horizontal)
         magnitude_vector = np.linalg.norm(vector)
+        if magnitude_vector == 0:
+            return 0
         angle = np.arccos(dot_product / magnitude_vector)
         return np.degrees(angle) - 90
 
@@ -78,24 +82,25 @@ class DeskPoseAnalyzer:
             facing_side = "right"
             shoulder, elbow, wrist = left_shoulder, left_elbow, left_wrist
         else:
-            results_text += "Facing direction is ambiguous or frontal.\n"
+            # results_text += "Facing direction is ambiguous or frontal.\n"
             facing_side = "ambiguous"
 
         if facing_side != "ambiguous":
-            results_text += f"The {facing_side} side of the person is facing the camera.\n"
+            # results_text += f"The {facing_side} side of the person is facing the camera.\n"
             shoulder_elbow_wrist_angle = self.calculate_angle(shoulder, elbow, wrist)
             
             neck = (left_shoulder + right_shoulder) / 2
             neck_angle = self.calculate_horizontal_angle(neck, nose)
 
-            if shoulder_elbow_wrist_angle < 90:
+            if shoulder_elbow_wrist_angle*2 < 100:
+                print(shoulder_elbow_wrist_angle)
                 results_text += "The desk is too high.\n"
-            elif shoulder_elbow_wrist_angle > 120:
+            elif shoulder_elbow_wrist_angle > 130:
                 results_text += "Table too low.\n"
             else:
                 results_text += "Correct table height.\n"
 
-            shoulder_wrist_distance = np.linalg.norm(np.array(shoulder) - np.array(wrist))
+            shoulder_wrist_distance = np.linalg.norm(np.array(shoulder) - np.array(wrist))*2
             body_tolerance = 0.15
             if shoulder_wrist_distance > body_tolerance:
                 results_text += "Table too far.\n"
@@ -131,4 +136,4 @@ class DeskPoseAnalyzer:
             else:
                 results_text += "Body is well balanced.\n"
 
-        return results_text, keypoints_with_scores, scores
+        return results_text

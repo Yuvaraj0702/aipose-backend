@@ -4,10 +4,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.core.files.storage import default_storage
 from django.conf import settings
-from PIL import Image as PILImage, ImageDraw
+from PIL import Image as PILImage
 import os
-import tensorflow as tf
+import cv2
+import mediapipe as mp
 import numpy as np
+import tensorflow as tf
 
 from .models import Image
 from .serializers import ImageSerializer
@@ -57,88 +59,56 @@ class SeatedPosture(APIView):
 
             preprocessed_image = preprocess_image(temp_image_full_path)
 
-            # Save the preprocessed image temporarily for analysis
-            preprocessed_image_path = 'preprocessed_' + image_file.name
-            preprocessed_image_full_path = os.path.join(settings.MEDIA_ROOT, 'tmp', preprocessed_image_path)
-            preprocessed_image_np = tf.squeeze(preprocessed_image).numpy()
-            preprocessed_image_pil = PILImage.fromarray(preprocessed_image_np.astype(np.uint8))
-            preprocessed_image_pil.save(preprocessed_image_full_path)
-
-            # Analyze the pose using PoseAnalyzer
+            # Analyze the pose using MediaPipe Pose
             pose_analyzer = PoseAnalyzer()
-            pose_results, keypoints_with_scores, scores = pose_analyzer.analyze_pose(temp_image_full_path)
 
+            # Convert the image to RGB and save it back to the same path
+            image_rgb = cv2.cvtColor(cv2.imread(temp_image_full_path), cv2.COLOR_BGR2RGB)
+            cv2.imwrite(temp_image_full_path, cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR))
 
-            # Adjust keypoints to the original image dimensions
-            def adjust_keypoints(keypoints, original_width, original_height, target_width=192, target_height=192):
-                width_ratio = original_width / target_width
-                height_ratio = original_height / target_height
-                adjusted_keypoints = []
-                for keypoint in keypoints:
-                    x, y = keypoint[1] * target_width, keypoint[0] * target_height
-                    adjusted_keypoints.append((y * height_ratio, x * width_ratio))
-                return adjusted_keypoints
+            results = pose_analyzer.pose.process(image_rgb)
+            pose_results = pose_analyzer.analyze_pose(temp_image_full_path)
 
-            adjusted_keypoints = adjust_keypoints(keypoints_with_scores, original_width, original_height)
+            if not results.pose_landmarks:
+                return Response({"error": "No landmarks detected. Please provide a clearer image."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Example skeleton structure for connecting keypoints
-            skeleton = [
-                (3, 5), (5, 7), (7, 9), (2, 4),
-                (4, 6), (6, 8), (5, 6), (5, 11),
-                (6, 12), (11, 12), (11, 13), (13, 15),
-                (12, 14), (14, 16), (1, 3), (2, 4), (0, 1),
-                (0, 2), (0, 3), (0, 4), (8, 10)
-            ]
+            # Draw landmarks on the image
+            mp_drawing = mp.solutions.drawing_utils
+            annotated_image = image_rgb.copy()
+            mp_drawing.draw_landmarks(
+                annotated_image,
+                results.pose_landmarks,
+                pose_analyzer.mp_pose.POSE_CONNECTIONS,
+                mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
+                mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2)
+            )
 
-            # Draw keypoints and lines on the original image
-            with PILImage.open(temp_image_full_path) as img:
-                draw = ImageDraw.Draw(img)
-                for i, keypoint in enumerate(adjusted_keypoints):
-                    x, y = keypoint[1], keypoint[0]
-                    color = 'green' if scores[i] > 0.3 else 'red'
-                    draw.ellipse((x-7, y-7, x+7, y+7), fill=color, outline=color)
-                
-                # Draw lines based on the skeleton structure
-                for start, end in skeleton:
-                    if start < len(adjusted_keypoints) and end < len(adjusted_keypoints):
-                        start_x, start_y = adjusted_keypoints[start][1], adjusted_keypoints[start][0]
-                        end_x, end_y = adjusted_keypoints[end][1], adjusted_keypoints[end][0]
-                        line_color = 'green' if scores[start] > 0.3 and scores[end] > 0.3 else 'red'
-                        draw.line((start_x, start_y, end_x, end_y), fill=line_color, width=3)
-                
-                # Save the annotated image
-                annotated_image_path = 'annotated_' + image_file.name
-                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
-                img.save(annotated_image_full_path)
+            # Convert the annotated image back to BGR for saving
+            annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
+            annotated_image_path = 'annotated_' + image_file.name
+            annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
+            cv2.imwrite(annotated_image_full_path, annotated_image)
 
             # Save the annotated image to the model
             with open(annotated_image_full_path, 'rb') as f:
-                annotated_image_file = default_storage.save('images/' + annotated_image_path, f)
+                annotated_image_file_name = default_storage.save('images/' + annotated_image_path, f)
+            
+            annotated_image_url = default_storage.url(annotated_image_file_name)
 
             # Clean up temporary files
             os.remove(temp_image_full_path)
-            os.remove(preprocessed_image_full_path)
 
             # Combine analysis results
             analysis_results = {
-                'pose_analysis': pose_results
+                'pose_analysis': pose_results,
+                'annotated_image_url': annotated_image_url
             }
 
-            # Save image instance with annotated image
-            serializer = ImageSerializer(data={'title': request.data.get('title', ''),
-                                               'image_file': annotated_image_file})
-            if serializer.is_valid():
-                serializer.save()
-                image_instance = serializer.instance
+            return Response(analysis_results, status=status.HTTP_201_CREATED)
 
-                # Include analysis results in the response
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
-            else:
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
             return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 class HandPosition(APIView):
     parser_classes = (MultiPartParser, FormParser)
@@ -270,86 +240,53 @@ class DeskPosition(APIView):
 
             preprocessed_image = preprocess_image(temp_image_full_path)
 
-            # Save the preprocessed image temporarily for analysis
-            preprocessed_image_path = 'preprocessed_' + image_file.name
-            preprocessed_image_full_path = os.path.join(settings.MEDIA_ROOT, 'tmp', preprocessed_image_path)
-            preprocessed_image_np = tf.squeeze(preprocessed_image).numpy()
-            preprocessed_image_pil = PILImage.fromarray(preprocessed_image_np.astype(np.uint8))
-            preprocessed_image_pil.save(preprocessed_image_full_path)
-
-            # Analyze the pose using PoseAnalyzer
+            # Analyze the pose using MediaPipe Pose
             pose_analyzer = DeskPoseAnalyzer()
-            pose_results, keypoints_with_scores, scores = pose_analyzer.analyze_pose(temp_image_full_path)
 
-           
+            # Convert the image to RGB and save it back to the same path
+            image_rgb = cv2.cvtColor(cv2.imread(temp_image_full_path), cv2.COLOR_BGR2RGB)
+            cv2.imwrite(temp_image_full_path, cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR))
 
-            # Adjust keypoints to the original image dimensions
-            def adjust_keypoints(keypoints, original_width, original_height, target_width=192, target_height=192):
-                width_ratio = original_width / target_width
-                height_ratio = original_height / target_height
-                adjusted_keypoints = []
-                for keypoint in keypoints:
-                    x, y = keypoint[1] * target_width, keypoint[0] * target_height
-                    adjusted_keypoints.append((y * height_ratio, x * width_ratio))
-                return adjusted_keypoints
+            results = pose_analyzer.pose.process(image_rgb)
+            pose_results = pose_analyzer.analyze_pose(temp_image_full_path)
 
-            adjusted_keypoints = adjust_keypoints(keypoints_with_scores, original_width, original_height)
+            if not results.pose_landmarks:
+                return Response({"error": "No landmarks detected. Please provide a clearer image."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Example skeleton structure for connecting keypoints
-            skeleton = [
-                (3, 5), (5, 7), (7, 9), (2, 4),
-                (4, 6), (6, 8), (5, 6), (5, 11),
-                (6, 12), (11, 12), (11, 13), (13, 15),
-                (12, 14), (14, 16), (1, 3), (2, 4), (0, 1),
-                (0, 2), (0, 3), (0, 4), (8, 10)
-            ]
+            # Draw landmarks on the image
+            mp_drawing = mp.solutions.drawing_utils
+            annotated_image = image_rgb.copy()
+            mp_drawing.draw_landmarks(
+                annotated_image,
+                results.pose_landmarks,
+                pose_analyzer.mp_pose.POSE_CONNECTIONS,
+                mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
+                mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2)
+            )
 
-            # Draw keypoints and lines on the original image
-            with PILImage.open(temp_image_full_path) as img:
-                draw = ImageDraw.Draw(img)
-                for i, keypoint in enumerate(adjusted_keypoints):
-                    x, y = keypoint[1], keypoint[0]
-                    color = 'green' if scores[i] > 0.3 else 'red'
-                    draw.ellipse((x-7, y-7, x+7, y+7), fill=color, outline=color)
-                
-                # Draw lines based on the skeleton structure
-                for start, end in skeleton:
-                    if start < len(adjusted_keypoints) and end < len(adjusted_keypoints):
-                        start_x, start_y = adjusted_keypoints[start][1], adjusted_keypoints[start][0]
-                        end_x, end_y = adjusted_keypoints[end][1], adjusted_keypoints[end][0]
-                        line_color = 'green' if scores[start] > 0.3 and scores[end] > 0.3 else 'red'
-                        draw.line((start_x, start_y, end_x, end_y), fill=line_color, width=3)
-                
-                # Save the annotated image
-                annotated_image_path = 'annotated_' + image_file.name
-                annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
-                img.save(annotated_image_full_path)
+            # Convert the annotated image back to BGR for saving
+            annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
+            annotated_image_path = 'annotated_' + image_file.name
+            annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
+            cv2.imwrite(annotated_image_full_path, annotated_image)
 
             # Save the annotated image to the model
             with open(annotated_image_full_path, 'rb') as f:
-                annotated_image_file = default_storage.save('images/' + annotated_image_path, f)
+                annotated_image_file_name = default_storage.save('images/' + annotated_image_path, f)
+            
+            annotated_image_url = default_storage.url(annotated_image_file_name)
 
             # Clean up temporary files
             os.remove(temp_image_full_path)
-            os.remove(preprocessed_image_full_path)
 
             # Combine analysis results
             analysis_results = {
                 'pose_analysis': pose_results,
+                'annotated_image_url': annotated_image_url
             }
 
-            # Save image instance with annotated image
-            serializer = ImageSerializer(data={'title': request.data.get('title', ''),
-                                               'image_file': annotated_image_file})
-            if serializer.is_valid():
-                serializer.save()
-                image_instance = serializer.instance
+            return Response(analysis_results, status=status.HTTP_201_CREATED)
 
-                # Include analysis results in the response
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
-            else:
-                return Response(analysis_results, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error during file processing:", str(e))
             return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        

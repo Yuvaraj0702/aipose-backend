@@ -18,15 +18,6 @@ class PoseAnalyzer:
         return np.degrees(angle)
 
     @staticmethod
-    def calculate_horizontal_angle(point1, point2):
-        vector = np.array([point2[0] - point1[0], point2[1] - point1[1]])
-        horizontal = np.array([1, 0])
-        dot_product = np.dot(vector, horizontal)
-        magnitude_vector = np.linalg.norm(vector)
-        angle = np.arccos(dot_product / magnitude_vector)
-        return np.degrees(angle) - 90
-
-    @staticmethod
     def preprocess_image(image_path):
         image = cv2.imread(image_path)
         if image is None:
@@ -36,8 +27,8 @@ class PoseAnalyzer:
 
     @staticmethod
     def check_legs_crossed(left_knee, right_knee, left_ankle, right_ankle):
-        knees_crossed = abs(left_knee[1] - right_knee[1]) < 0.1
-        ankles_crossed = abs(left_ankle[1] - right_ankle[1]) < 0.1
+        knees_crossed = abs(left_knee[0] - right_knee[0]) < 0.1
+        ankles_crossed = abs(left_ankle[0] - right_ankle[0]) < 0.1
         return knees_crossed or ankles_crossed
 
     def analyze_pose(self, image_path):
@@ -84,14 +75,15 @@ class PoseAnalyzer:
             facing_side = "right"
             shoulder, hip, knee, ankle = left_shoulder, left_hip, left_knee, left_ankle
         else:
-            analysis_results += "Facing direction is ambiguous or frontal.\n"
+            # analysis_results += "Facing direction is ambiguous or frontal.\n"
             facing_side = "ambiguous"
 
         if facing_side != "ambiguous":
-            analysis_results += f"The {facing_side} side of the person is facing the camera.\n"
+            # analysis_results += f"The {facing_side} side of the person is facing the camera.\n"
             shoulder_hip_knee_angle = self.calculate_angle(shoulder, hip, knee)
             hip_knee_ankle_angle = self.calculate_angle(hip, knee, ankle)
-
+            print(shoulder_hip_knee_angle)
+            print(hip_knee_ankle_angle)
             if 85 <= shoulder_hip_knee_angle <= 115:
                 analysis_results += "Correct sitting posture.\n"
             elif shoulder_hip_knee_angle < 85:
@@ -107,8 +99,12 @@ class PoseAnalyzer:
                 analysis_results += "Hip higher than knees.\n"
 
             # Back Position
-            shoulder_hip_angle = self.calculate_angle(left_shoulder, (left_shoulder + right_shoulder) / 2, right_shoulder)
-            if shoulder_hip_angle < 160:
+            vertical = np.array([0, 1])
+            shoulder_hip_vector = np.array([right_shoulder[0] - left_shoulder[0], right_shoulder[1] - left_shoulder[1]])
+            shoulder_hip_angle = np.arccos(np.dot(shoulder_hip_vector, vertical) / np.linalg.norm(shoulder_hip_vector))
+            shoulder_hip_angle = np.degrees(shoulder_hip_angle)
+
+            if shoulder_hip_angle < 20:
                 analysis_results += "Back is not straight.\n"
             else:
                 analysis_results += "Back is straight.\n"
@@ -123,7 +119,7 @@ class PoseAnalyzer:
                 analysis_results += "Body is well balanced.\n"
 
         feet_on_ground_tolerance = 0.05
-        if abs(left_ankle[0] - right_ankle[0]) < feet_on_ground_tolerance:
+        if abs(left_ankle[1] - right_ankle[1]) < feet_on_ground_tolerance:
             analysis_results += "Both feet are placed on the ground.\n"
         else:
             analysis_results += "Feet are not evenly placed on the ground or at least one foot is not on the ground.\n"
@@ -133,4 +129,4 @@ class PoseAnalyzer:
         else:
             analysis_results += "The legs are crossed.\n"
 
-        return analysis_results, keypoints, scores
+        return analysis_results
