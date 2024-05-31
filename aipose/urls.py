@@ -16,10 +16,12 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from .views import SeatedPosture,HandPosition,DeskPosition
+from .views import SeatedPosture,HandPosition,DeskPosition,Annotation
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
+from django.urls import re_path
+from . import consumers
 
 def home_view(request):
     return HttpResponse("Welcome to the homepage!")
@@ -29,7 +31,9 @@ urlpatterns = [
     path('api/images/seatedposture/', SeatedPosture.as_view(), name='image-list'),
     path('api/images/handposition/', HandPosition.as_view(), name='image-list'),
     path('api/images/deskposition/', DeskPosition.as_view(), name='image-list'),
+    path('api/images/annotateimage/',Annotation.as_view(), name='image-list'),
     path('', home_view, name='home'),
+    # re_path(r'ws/pose/$', consumers.PoseConsumer.as_asgi()),
 ]
 
 if settings.DEBUG:

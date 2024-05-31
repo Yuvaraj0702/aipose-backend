@@ -3,6 +3,7 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import numpy as np
+import os
 
 class HandPoseAnalyzer:
     landmark_names = [
@@ -27,16 +28,15 @@ class HandPoseAnalyzer:
 
     def download_model(self, url, save_path):
         # Download the model file if it's not already present
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
+        if not os.path.exists(save_path):
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
                 with open(save_path, 'wb') as file:
                     file.write(response.content)
                 print(f"Model downloaded and saved as {save_path}")
-            else:
-                print(f"Failed to download the model. Status code: {response.status_code}")
-        except Exception as e:
-            print(f"An error occurred while downloading the model: {e}")
+            except requests.RequestException as e:
+                print(f"An error occurred while downloading the model: {e}")
 
     def analyze_hand_pose(self, image_path):
         # Load the input image and detect hand landmarks
@@ -44,7 +44,7 @@ class HandPoseAnalyzer:
         detection_result = self.detector.detect(image)
         if not detection_result.hand_landmarks:
             return "No hands detected. Please take another picture."
-        
+
         return self.get_landmarks_string(detection_result)
 
     def get_landmarks_string(self, detection_result):
@@ -85,33 +85,19 @@ class HandPoseAnalyzer:
 
     def analyze_claw_grip(self, landmarks):
         threshold = 0.1
-        bent_fingers = 0
-        for tip_index in [8, 12, 16, 20]:  # Tips of index, middle, ring, and pinky
-            if np.linalg.norm(np.array([landmarks[tip_index].x, landmarks[tip_index].y]) - 
-                              np.array([landmarks[tip_index - 2].x, landmarks[tip_index - 2].y])) < threshold:
-                bent_fingers += 1
+        bent_fingers = sum(
+            np.linalg.norm(np.array([landmarks[tip_index].x, landmarks[tip_index].y]) - 
+                           np.array([landmarks[tip_index - 2].x, landmarks[tip_index - 2].y])) < threshold
+            for tip_index in [8, 12, 16, 20]
+        )
 
-        if bent_fingers >= 3:
-            return "  Claw grip detected.\n"
-        else:
-            return "  Claw grip not detected.\n"
+        return "  Claw grip detected.\n" if bent_fingers >= 3 else "  Claw grip not detected.\n"
 
     def analyze_finger_extension(self, landmarks):
-        extended_fingers = 0
-        for tip_index in [8, 12, 16, 20]:  # Tips of index, middle, ring, and pinky
-            pip_joint = landmarks[tip_index - 2]
-            dip_joint = landmarks[tip_index - 1]
-            tip = landmarks[tip_index]
+        extended_fingers = sum(
+            landmarks[tip_index].y < landmarks[tip_index - 1].y < landmarks[tip_index - 2].y
+            for tip_index in [8, 12, 16, 20]
+        )
 
-            if tip.y < dip_joint.y < pip_joint.y:
-                extended_fingers += 1
+        return "  Fingers are extended.\n" if extended_fingers >= 3 else "  Fingers are not extended.\n"
 
-        if extended_fingers >= 3:
-            return "  Fingers are extended.\n"
-        else:
-            return "  Fingers are not extended.\n"
-
-# Example usage:
-# hand_pose_analyzer = HandPoseAnalyzer()
-# results = hand_pose_analyzer.analyze_hand_pose("aipose/hand_input.jpg")
-# print(results)

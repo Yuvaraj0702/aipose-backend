@@ -38,32 +38,28 @@ class PoseAnalyzer:
         if not results.pose_landmarks:
             return "Improper picture. Please provide a clearer image.", None, None
 
-        keypoints = []
-        scores = []
-
-        for landmark in results.pose_landmarks.landmark:
-            keypoints.append([landmark.x, landmark.y])
-            scores.append(landmark.visibility)
-
-        keypoints = np.array(keypoints)
-        scores = np.array(scores)
+        keypoints = np.array([[landmark.x, landmark.y] for landmark in results.pose_landmarks.landmark])
+        scores = np.array([landmark.visibility for landmark in results.pose_landmarks.landmark])
 
         # Check confidence levels
         low_confidence_points = np.sum(scores < 0.2)
         if low_confidence_points / len(scores) > 0.75:
             return "Improper picture. Please provide a clearer image.", keypoints, scores
 
-        nose = keypoints[self.mp_pose.PoseLandmark.NOSE.value]
-        left_ear = keypoints[self.mp_pose.PoseLandmark.LEFT_EAR.value]
-        right_ear = keypoints[self.mp_pose.PoseLandmark.RIGHT_EAR.value]
-        left_shoulder = keypoints[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
-        right_shoulder = keypoints[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
-        left_hip = keypoints[self.mp_pose.PoseLandmark.LEFT_HIP.value]
-        right_hip = keypoints[self.mp_pose.PoseLandmark.RIGHT_HIP.value]
-        left_knee = keypoints[self.mp_pose.PoseLandmark.LEFT_KNEE.value]
-        right_knee = keypoints[self.mp_pose.PoseLandmark.RIGHT_KNEE.value]
-        left_ankle = keypoints[self.mp_pose.PoseLandmark.LEFT_ANKLE.value]
-        right_ankle = keypoints[self.mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+        landmarks = {landmark: keypoints[self.mp_pose.PoseLandmark[landmark].value]
+                     for landmark in self.mp_pose.PoseLandmark.__members__.keys()}
+
+        nose = landmarks['NOSE']
+        left_ear = landmarks['LEFT_EAR']
+        right_ear = landmarks['RIGHT_EAR']
+        left_shoulder = landmarks['LEFT_SHOULDER']
+        right_shoulder = landmarks['RIGHT_SHOULDER']
+        left_hip = landmarks['LEFT_HIP']
+        right_hip = landmarks['RIGHT_HIP']
+        left_knee = landmarks['LEFT_KNEE']
+        right_knee = landmarks['RIGHT_KNEE']
+        left_ankle = landmarks['LEFT_ANKLE']
+        right_ankle = landmarks['RIGHT_ANKLE']
 
         analysis_results = ""
 
@@ -75,15 +71,12 @@ class PoseAnalyzer:
             facing_side = "right"
             shoulder, hip, knee, ankle = left_shoulder, left_hip, left_knee, left_ankle
         else:
-            # analysis_results += "Facing direction is ambiguous or frontal.\n"
             facing_side = "ambiguous"
 
         if facing_side != "ambiguous":
-            # analysis_results += f"The {facing_side} side of the person is facing the camera.\n"
             shoulder_hip_knee_angle = self.calculate_angle(shoulder, hip, knee)
             hip_knee_ankle_angle = self.calculate_angle(hip, knee, ankle)
-            print(shoulder_hip_knee_angle)
-            print(hip_knee_ankle_angle)
+
             if 85 <= shoulder_hip_knee_angle <= 115:
                 analysis_results += "Correct sitting posture.\n"
             elif shoulder_hip_knee_angle < 85:
@@ -100,9 +93,8 @@ class PoseAnalyzer:
 
             # Back Position
             vertical = np.array([0, 1])
-            shoulder_hip_vector = np.array([right_shoulder[0] - left_shoulder[0], right_shoulder[1] - left_shoulder[1]])
-            shoulder_hip_angle = np.arccos(np.dot(shoulder_hip_vector, vertical) / np.linalg.norm(shoulder_hip_vector))
-            shoulder_hip_angle = np.degrees(shoulder_hip_angle)
+            shoulder_hip_vector = right_shoulder - left_shoulder
+            shoulder_hip_angle = np.degrees(np.arccos(np.dot(shoulder_hip_vector, vertical) / np.linalg.norm(shoulder_hip_vector)))
 
             if shoulder_hip_angle < 20:
                 analysis_results += "Back is not straight.\n"
@@ -110,16 +102,13 @@ class PoseAnalyzer:
                 analysis_results += "Back is straight.\n"
 
             # Overall Balance
-            if abs(left_shoulder[1] - right_shoulder[1]) > 0.1:
-                if left_shoulder[1] > right_shoulder[1]:
-                    analysis_results += "Leaning to the right.\n"
-                else:
-                    analysis_results += "Leaning to the left.\n"
+            shoulder_diff = abs(left_shoulder[1] - right_shoulder[1])
+            if shoulder_diff > 0.1:
+                analysis_results += "Leaning to the right.\n" if left_shoulder[1] > right_shoulder[1] else "Leaning to the left.\n"
             else:
                 analysis_results += "Body is well balanced.\n"
 
-        feet_on_ground_tolerance = 0.05
-        if abs(left_ankle[1] - right_ankle[1]) < feet_on_ground_tolerance:
+        if abs(left_ankle[1] - right_ankle[1]) < 0.05:
             analysis_results += "Both feet are placed on the ground.\n"
         else:
             analysis_results += "Feet are not evenly placed on the ground or at least one foot is not on the ground.\n"
@@ -130,3 +119,4 @@ class PoseAnalyzer:
             analysis_results += "The legs are crossed.\n"
 
         return analysis_results
+

@@ -4,11 +4,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.core.files.storage import default_storage
 from django.conf import settings
-from PIL import Image as PILImage
 import os
 import cv2
 import mediapipe as mp
-import numpy as np
 import tensorflow as tf
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -33,12 +31,30 @@ def preprocess_image(image_path):
     except tf.errors.InvalidArgumentError:
         raise ValueError("Invalid image file. Please check the image path and format.")
 
-def process_pose_image(file_path, analyzer_class):
+def analyze_pose_image(file_path, analyzer_class):
+    try:
+        image_rgb = cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
+        analyzer = analyzer_class()
+        analysis_results = analyzer.analyze_pose(file_path)
+        return analysis_results
+    except Exception as e:
+        logger.error("Error during image processing: %s", str(e))
+        raise
+
+def analyze_hand_image(file_path):
+    try:
+        analyzer = HandPoseAnalyzer()
+        hand_results = analyzer.analyze_hand_pose(file_path)
+        return hand_results
+    except Exception as e:
+        logger.error("Error during hand image processing: %s", str(e))
+        raise
+
+def annotate_and_save_image(file_path, analyzer_class):
     try:
         image_rgb = cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
         analyzer = analyzer_class()
         results = analyzer.pose.process(image_rgb)
-        analysis_results = analyzer.analyze_pose(file_path)
 
         if not results.pose_landmarks:
             raise ValueError("No landmarks detected. Please provide a clearer image.")
@@ -53,22 +69,17 @@ def process_pose_image(file_path, analyzer_class):
             mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2)
         )
         annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
-        return annotated_image, analysis_results
+        annotated_image_path = 'annotated_' + os.path.basename(file_path)
+        annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
+        cv2.imwrite(annotated_image_full_path, annotated_image)
+
+        with open(annotated_image_full_path, 'rb') as f:
+            annotated_image_file_name = default_storage.save('images/' + annotated_image_path, f)
+
+        annotated_image_url = default_storage.url(annotated_image_file_name)
+        return annotated_image_url
     except Exception as e:
-        logger.error("Error during image processing: %s", str(e))
-        raise
-
-def process_hand_image(file_path):
-    try:
-        analyzer = HandPoseAnalyzer()
-        hand_results = analyzer.analyze_hand_pose(file_path)
-
-        image_rgb = cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
-        annotated_image = image_rgb.copy()  # This part can be expanded to draw landmarks if needed.
-
-        return annotated_image, hand_results
-    except Exception as e:
-        logger.error("Error during hand image processing: %s", str(e))
+        logger.error("Error during image annotation and saving: %s", str(e))
         raise
 
 class BasePoseAPIView(APIView):
@@ -94,27 +105,17 @@ class BasePoseAPIView(APIView):
 
             with ThreadPoolExecutor() as executor:
                 if self.analyzer_class is not None:
-                    future = executor.submit(process_pose_image, temp_image_full_path, self.analyzer_class)
+                    future = executor.submit(analyze_pose_image, temp_image_full_path, self.analyzer_class)
                 else:
-                    future = executor.submit(process_hand_image, temp_image_full_path)
-                annotated_image, analysis_results = future.result()
+                    future = executor.submit(analyze_hand_image, temp_image_full_path)
+                analysis_results = future.result()
+                os.remove(temp_image_full_path)
 
-            annotated_image_path = 'annotated_' + image_file.name
-            annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
-            cv2.imwrite(annotated_image_full_path, annotated_image)
+                result = {
+                    'analysis': analysis_results,
+                }
 
-            with open(annotated_image_full_path, 'rb') as f:
-                annotated_image_file_name = default_storage.save('images/' + annotated_image_path, f)
-
-            annotated_image_url = default_storage.url(annotated_image_file_name)
-            os.remove(temp_image_full_path)
-
-            result = {
-                'analysis': analysis_results,
-                'annotated_image_url': annotated_image_url
-            }
-
-            return Response(result, status=status.HTTP_201_CREATED)
+                return Response(result, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error("Error during file processing: %s", str(e))
             return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -127,3 +128,43 @@ class HandPosition(BasePoseAPIView):
 
 class DeskPosition(BasePoseAPIView):
     analyzer_class = DeskPoseAnalyzer
+
+class Annotation(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        logger.info("Request data: %s", request.data)
+        logger.info("Request FILES: %s", request.FILES)
+
+        image_file = request.FILES.get('image_file', None)
+        analyzer_type = request.data.get('analyzer_type', None)
+        if not image_file or not analyzer_type:
+            return Response({"error": "No image file or analyzer type provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            temp_image_path = default_storage.save('tmp/' + image_file.name, image_file)
+            temp_image_full_path = os.path.join(settings.MEDIA_ROOT, temp_image_path)
+
+            analyzer_class = None
+            if analyzer_type == 'seated':
+                analyzer_class = PoseAnalyzer
+            elif analyzer_type == 'desk':
+                analyzer_class = DeskPoseAnalyzer
+            elif analyzer_type == 'hand':
+                analyzer_class = HandPoseAnalyzer
+
+            if not analyzer_class:
+                return Response({"error": "Invalid analyzer type"}, status=status.HTTP_400_BAD_REQUEST)
+
+            annotated_image_url = annotate_and_save_image(temp_image_full_path, analyzer_class)
+
+            os.remove(temp_image_full_path)
+
+            result = {
+                'annotated_image_url': annotated_image_url
+            }
+
+            return Response(result, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error("Error during file processing: %s", str(e))
+            return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
