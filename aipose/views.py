@@ -1,3 +1,5 @@
+import time
+from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
@@ -50,8 +52,9 @@ def analyze_hand_image(file_path):
         logger.error("Error during hand image processing: %s", str(e))
         raise
 
-def annotate_and_save_image(file_path, analyzer_class):
+def annotate_image(file_path, analyzer_class):
     try:
+        # Read and process the image
         image_rgb = cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
         analyzer = analyzer_class()
         results = analyzer.pose.process(image_rgb)
@@ -59,6 +62,7 @@ def annotate_and_save_image(file_path, analyzer_class):
         if not results.pose_landmarks:
             raise ValueError("No landmarks detected. Please provide a clearer image.")
 
+        # Draw landmarks on the image
         mp_drawing = mp.solutions.drawing_utils
         annotated_image = image_rgb.copy()
         mp_drawing.draw_landmarks(
@@ -69,17 +73,10 @@ def annotate_and_save_image(file_path, analyzer_class):
             mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2)
         )
         annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
-        annotated_image_path = 'annotated_' + os.path.basename(file_path)
-        annotated_image_full_path = os.path.join(settings.MEDIA_ROOT, 'images', annotated_image_path)
-        cv2.imwrite(annotated_image_full_path, annotated_image)
 
-        with open(annotated_image_full_path, 'rb') as f:
-            annotated_image_file_name = default_storage.save('images/' + annotated_image_path, f)
-
-        annotated_image_url = default_storage.url(annotated_image_file_name)
-        return annotated_image_url
+        return annotated_image
     except Exception as e:
-        logger.error("Error during image annotation and saving: %s", str(e))
+        logger.error("Error during image annotation: %s", str(e))
         raise
 
 class BasePoseAPIView(APIView):
@@ -156,15 +153,15 @@ class Annotation(APIView):
             if not analyzer_class:
                 return Response({"error": "Invalid analyzer type"}, status=status.HTTP_400_BAD_REQUEST)
 
-            annotated_image_url = annotate_and_save_image(temp_image_full_path, analyzer_class)
+            annotated_image = annotate_image(temp_image_full_path, analyzer_class)
 
             os.remove(temp_image_full_path)
 
-            result = {
-                'annotated_image_url': annotated_image_url
-            }
+            _, annotated_image_encoded = cv2.imencode('.jpg', annotated_image)
+            response = HttpResponse(annotated_image_encoded.tobytes(), content_type='image/jpeg')
+            response['Content-Disposition'] = 'inline; filename="annotated_image.jpg"'
 
-            return Response(result, status=status.HTTP_201_CREATED)
+            return response
         except Exception as e:
             logger.error("Error during file processing: %s", str(e))
             return Response({"error": "An error occurred while processing the file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
