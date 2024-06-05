@@ -78,19 +78,19 @@ class DeskPoseAnalyzer:
                 neck_angle = self.calculate_horizontal_angle(neck, nose)
 
                 if shoulder_elbow_wrist_angle < self.ANGLE_THRESHOLD_LOW:
-                    results_text += "The desk is too high.\n"
+                    results_text += "positive\n"
                 elif shoulder_elbow_wrist_angle > self.ANGLE_THRESHOLD_HIGH:
-                    results_text += "Table too low.\n"
+                    results_text += "Negative\n"
                 else:
-                    results_text += "Correct table height.\n"
+                    results_text += "Neutral.\n"
 
                 shoulder_wrist_distance = np.linalg.norm(shoulder - wrist) * 2
                 if shoulder_wrist_distance > self.BODY_TOLERANCE:
-                    results_text += "Table too far.\n"
+                    results_text += "Negative\n"
                 elif shoulder_wrist_distance < self.BODY_TOLERANCE / 2:
-                    results_text += "Table too close.\n"
+                    results_text += "Positive\n"
                 else:
-                    results_text += "Table at a good distance.\n"
+                    results_text += "Neutral\n"
 
                 if neck_angle > self.NECK_ANGLE_TOLERANCE:
                     results_text += "Looking upwards.\n"

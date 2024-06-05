@@ -65,11 +65,11 @@ class HandPoseAnalyzer:
         middle_tip = landmarks[12]
 
         if middle_tip.y < middle_mcp.y and middle_tip.y < wrist.y:
-            return "  Hand is bent inwards.\n"
+            return " Positive\n"
         elif middle_tip.y > middle_mcp.y and middle_tip.y > wrist.y:
-            return "  Hand is bent outwards.\n"
+            return " Negative\n"
         else:
-            return "  Hand is not bent inwards or outwards.\n"
+            return "Neutral\n"
 
     def analyze_wrist_flexion(self, landmarks):
         wrist = landmarks[0]
@@ -77,11 +77,11 @@ class HandPoseAnalyzer:
         pinky_mcp = landmarks[17]
 
         if index_mcp.y < wrist.y and pinky_mcp.y < wrist.y:
-            return "  Wrist is flexed upwards.\n"
+            return "Positive\n"
         elif index_mcp.y > wrist.y and pinky_mcp.y > wrist.y:
-            return "  Wrist is flexed downwards.\n"
+            return "Negative\n"
         else:
-            return "  Wrist is not flexed upwards or downwards.\n"
+            return "Neutral\n"
 
     def analyze_claw_grip(self, landmarks):
         threshold = 0.1
@@ -91,7 +91,7 @@ class HandPoseAnalyzer:
             for tip_index in [8, 12, 16, 20]
         )
 
-        return "  Claw grip detected.\n" if bent_fingers >= 3 else "  Claw grip not detected.\n"
+        return "Negative.\n" if bent_fingers >= 3 else " Positive.\n"
 
     def analyze_finger_extension(self, landmarks):
         extended_fingers = sum(

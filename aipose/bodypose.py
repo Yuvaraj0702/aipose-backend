@@ -78,18 +78,18 @@ class PoseAnalyzer:
             hip_knee_ankle_angle = self.calculate_angle(hip, knee, ankle)
 
             if 85 <= shoulder_hip_knee_angle <= 115:
-                analysis_results += "Correct sitting posture.\n"
+                analysis_results += "Neutral.\n"
             elif shoulder_hip_knee_angle < 85:
-                analysis_results += "Leaning forward.\n"
+                analysis_results += "Positive\n"
             else:
-                analysis_results += "Leaning backward.\n"
+                analysis_results += "Negative\n"
 
             if 90 <= hip_knee_ankle_angle <= 110:
-                analysis_results += "Hip in line with legs.\n"
+                analysis_results += "Neutral\n"
             elif hip_knee_ankle_angle < 90:
-                analysis_results += "Hip lower than knees.\n"
+                analysis_results += "Positive\n"
             else:
-                analysis_results += "Hip higher than knees.\n"
+                analysis_results += "Negative\n"
 
             # Back Position
             vertical = np.array([0, 1])
@@ -97,26 +97,26 @@ class PoseAnalyzer:
             shoulder_hip_angle = np.degrees(np.arccos(np.dot(shoulder_hip_vector, vertical) / np.linalg.norm(shoulder_hip_vector)))
 
             if shoulder_hip_angle < 20:
-                analysis_results += "Back is not straight.\n"
+                analysis_results += "Negative\n"
             else:
-                analysis_results += "Back is straight.\n"
+                analysis_results += "Positive.\n"
 
             # Overall Balance
             shoulder_diff = abs(left_shoulder[1] - right_shoulder[1])
             if shoulder_diff > 0.1:
-                analysis_results += "Leaning to the right.\n" if left_shoulder[1] > right_shoulder[1] else "Leaning to the left.\n"
+                analysis_results += "Positive\n" if left_shoulder[1] > right_shoulder[1] else "Negative\n"
             else:
-                analysis_results += "Body is well balanced.\n"
+                analysis_results += "Neutral\n"
 
         if abs(left_ankle[1] - right_ankle[1]) < 0.05:
-            analysis_results += "Both feet are placed on the ground.\n"
+            analysis_results += "Positive\n"
         else:
-            analysis_results += "Feet are not evenly placed on the ground or at least one foot is not on the ground.\n"
+            analysis_results += "Negative\n"
 
         if self.check_legs_crossed(left_knee, right_knee, left_ankle, right_ankle):
-            analysis_results += "The legs are not crossed.\n"
+            analysis_results += "Positive\n"
         else:
-            analysis_results += "The legs are crossed.\n"
+            analysis_results += "Negative\n"
 
         return analysis_results
 
