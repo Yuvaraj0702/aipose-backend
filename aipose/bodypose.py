@@ -91,32 +91,32 @@ class PoseAnalyzer:
             else:
                 analysis_results += "Negative\n"
 
-            # Back Position
-            vertical = np.array([0, 1])
-            shoulder_hip_vector = right_shoulder - left_shoulder
-            shoulder_hip_angle = np.degrees(np.arccos(np.dot(shoulder_hip_vector, vertical) / np.linalg.norm(shoulder_hip_vector)))
+            # # Back Position
+            # vertical = np.array([0, 1])
+            # shoulder_hip_vector = right_shoulder - left_shoulder
+            # shoulder_hip_angle = np.degrees(np.arccos(np.dot(shoulder_hip_vector, vertical) / np.linalg.norm(shoulder_hip_vector)))
 
-            if shoulder_hip_angle < 20:
-                analysis_results += "Negative\n"
-            else:
-                analysis_results += "Positive.\n"
+            # if shoulder_hip_angle < 20:
+            #     analysis_results += "Negative\n"
+            # else:
+            #     analysis_results += "Positive.\n"
 
-            # Overall Balance
-            shoulder_diff = abs(left_shoulder[1] - right_shoulder[1])
-            if shoulder_diff > 0.1:
-                analysis_results += "Positive\n" if left_shoulder[1] > right_shoulder[1] else "Negative\n"
-            else:
-                analysis_results += "Neutral\n"
+            # # Overall Balance
+            # shoulder_diff = abs(left_shoulder[1] - right_shoulder[1])
+            # if shoulder_diff > 0.1:
+            #     analysis_results += "Positive\n" if left_shoulder[1] > right_shoulder[1] else "Negative\n"
+            # else:
+            #     analysis_results += "Neutral\n"
 
-        if abs(left_ankle[1] - right_ankle[1]) < 0.05:
-            analysis_results += "Positive\n"
-        else:
-            analysis_results += "Negative\n"
+        # if abs(left_ankle[1] - right_ankle[1]) < 0.05:
+        #     analysis_results += "Positive\n"
+        # else:
+        #     analysis_results += "Negative\n"
 
-        if self.check_legs_crossed(left_knee, right_knee, left_ankle, right_ankle):
-            analysis_results += "Positive\n"
-        else:
-            analysis_results += "Negative\n"
+        # if self.check_legs_crossed(left_knee, right_knee, left_ankle, right_ankle):
+        #     analysis_results += "Positive\n"
+        # else:
+        #     analysis_results += "Negative\n"
 
         return analysis_results
 

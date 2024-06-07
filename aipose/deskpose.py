@@ -93,21 +93,21 @@ class DeskPoseAnalyzer:
                     results_text += "Neutral\n"
 
                 if neck_angle > self.NECK_ANGLE_TOLERANCE:
-                    results_text += "Looking upwards.\n"
+                    results_text += "Positive\n"
                 elif neck_angle < -self.NECK_ANGLE_TOLERANCE:
-                    results_text += "Looking downwards.\n"
+                    results_text += "Negative\n"
                 else:
-                    results_text += "Good neck position.\n"
+                    results_text += "Neutral\n"
 
-                if abs(wrist[1] - elbow[1]) > self.WRIST_ELBOW_VERTICAL_TOLERANCE:
-                    results_text += "Wrist higher than elbow.\n" if wrist[1] > elbow[1] else "Wrist lower than elbow.\n"
+                # if abs(wrist[1] - elbow[1]) > self.WRIST_ELBOW_VERTICAL_TOLERANCE:
+                #     results_text += "Wrist higher than elbow.\n" if wrist[1] > elbow[1] else "Wrist lower than elbow.\n"
 
-                shoulder_hip_angle = self.calculate_angle(left_shoulder, neck, right_shoulder)
-                results_text += "Back is not straight.\n" if shoulder_hip_angle < self.SHOULDER_HIP_ANGLE_THRESHOLD else "Back is straight.\n"
+                # shoulder_hip_angle = self.calculate_angle(left_shoulder, neck, right_shoulder)
+                # results_text += "Back is not straight.\n" if shoulder_hip_angle < self.SHOULDER_HIP_ANGLE_THRESHOLD else "Back is straight.\n"
 
-                if abs(left_shoulder[1] - right_shoulder[1]) > self.SHOULDER_BALANCE_TOLERANCE:
-                    results_text += "Leaning to the right.\n" if left_shoulder[1] > right_shoulder[1] else "Leaning to the left.\n"
-                else:
-                    results_text += "Body is well balanced.\n"
+                # if abs(left_shoulder[1] - right_shoulder[1]) > self.SHOULDER_BALANCE_TOLERANCE:
+                #     results_text += "Leaning to the right.\n" if left_shoulder[1] > right_shoulder[1] else "Leaning to the left.\n"
+                # else:
+                #     results_text += "Body is well balanced.\n"
 
             return results_text

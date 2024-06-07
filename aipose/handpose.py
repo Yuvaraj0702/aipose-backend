@@ -56,7 +56,7 @@ class HandPoseAnalyzer:
                 results += self.analyze_hand_bend(landmarks)
                 results += self.analyze_wrist_flexion(landmarks)
                 results += self.analyze_claw_grip(landmarks)
-                results += self.analyze_finger_extension(landmarks)
+                # results += self.analyze_finger_extension(landmarks)
         return results
 
     def analyze_hand_bend(self, landmarks):
@@ -93,11 +93,11 @@ class HandPoseAnalyzer:
 
         return "Negative.\n" if bent_fingers >= 3 else " Positive.\n"
 
-    def analyze_finger_extension(self, landmarks):
-        extended_fingers = sum(
-            landmarks[tip_index].y < landmarks[tip_index - 1].y < landmarks[tip_index - 2].y
-            for tip_index in [8, 12, 16, 20]
-        )
+    # def analyze_finger_extension(self, landmarks):
+    #     extended_fingers = sum(
+    #         landmarks[tip_index].y < landmarks[tip_index - 1].y < landmarks[tip_index - 2].y
+    #         for tip_index in [8, 12, 16, 20]
+    #     )
 
-        return "  Fingers are extended.\n" if extended_fingers >= 3 else "  Fingers are not extended.\n"
+    #     return "  Fingers are extended.\n" if extended_fingers >= 3 else "  Fingers are not extended.\n"
 
