@@ -1,0 +1,8 @@
+Django
+djangorestframework
+Pillow
+opencv-python-headless
+mediapipe
+tensorflow
+numpy
+gunicorn
